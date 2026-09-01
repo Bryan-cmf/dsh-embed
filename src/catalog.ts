@@ -49,17 +49,30 @@ export const BACKEND_CATALOG: Record<string, CatalogEntry> = {
   },
 }
 
-export function catalogBackendInfos(sidecar: SidecarId, defaultDim: number, alive: boolean): BackendInfo[] {
+/** R2F1:按角色選維度(含圖像模態=視覺角色),供 catalog 兜底展示。 */
+export interface CatalogDims {
+  text: number
+  visual: number
+}
+
+export function catalogBackendInfos(sidecar: SidecarId, dims: CatalogDims, alive: boolean): BackendInfo[] {
   return Object.values(BACKEND_CATALOG)
     .filter((entry) => entry.sidecar === sidecar)
-    .map((entry) => ({
-      name: entry.name,
-      model: entry.model,
-      dims: [...entry.dims],
-      modalities: [...entry.modalities],
-      fingerprint: `${entry.name}@${defaultDim}`,
-      alive,
-    }))
+    .map((entry) => {
+      // R2F1 修復:此前按 sidecar 一刀切(tf→textDim)會給 tf 側的 wemm2b-fp16
+      // 標出非法指紋 @2560(其梯最大 2048)。按角色選維並夾到該後端梯內最大值。
+      const want = entry.modalities.includes('image') ? dims.visual : dims.text
+      const max = entry.dims[entry.dims.length - 1]!
+      const dim = Math.min(want, max)
+      return {
+        name: entry.name,
+        model: entry.model,
+        dims: [...entry.dims],
+        modalities: [...entry.modalities],
+        fingerprint: `${entry.name}@${dim}`,
+        alive,
+      }
+    })
 }
 
 /** 後端名 → sidecar 路由;未知後端返回 null。 */

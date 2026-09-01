@@ -105,8 +105,9 @@ export class EmbedderServiceImpl implements EmbedderService {
           continue
         }
       }
-      // F4:catalog 兜底展示按 sidecar 選默認維度(tf=textDim / mlx=visualDim)。
-      out.push(...catalogBackendInfos(id, id === 'tf' ? this.defaults.textDim : this.defaults.visualDim, false))
+      // R2F1:catalog 兜底按「後端角色」選維度(視覺後端夾各自梯最大),由
+      // catalogBackendInfos 內部裁決,杜絕 wemm2b-fp16@2560 這類非法指紋。
+      out.push(...catalogBackendInfos(id, { text: this.defaults.textDim, visual: this.defaults.visualDim }, false))
     }
     return out
   }

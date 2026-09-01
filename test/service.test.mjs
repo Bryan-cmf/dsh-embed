@@ -238,7 +238,8 @@ test('backends():down 時給目錄 alive:false;up 時給 live 清單', async () 
   assert.ok(list.some((b) => b.name === 'wemm2b-mlx4b'))
   assert.ok(list.some((b) => b.name === 'qwen3-4b-fp16'))
   assert.ok(list.some((b) => b.name === 'wemm2b-fp16'))
-  assert.ok(list.every((b) => b.fingerprint === (b.name === 'wemm2b-mlx4b' ? 'wemm2b-mlx4b@2048' : `${b.name}@2560`)))
+  // R2F1:按後端角色斷言——wemm2b*(視覺)@2048、qwen3*(文本)@2560
+  assert.ok(list.every((b) => b.fingerprint === `${b.name}@${b.name.startsWith('wemm2b') ? 2048 : 2560}`))
 
   await drive(tfRig.clock, service.embedTexts(['warm']))
   list = await service.backends()

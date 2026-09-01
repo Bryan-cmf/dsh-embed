@@ -89,9 +89,9 @@ export class RuntimeDir {
     await this.fs_.rm(this.file(id), { force: true })
   }
 
-  /** 測試輔助:同步寫握手文件。 */
+  /** 測試輔助:同步寫握手文件。0600——文件含 token,不可同機其他用戶可讀(t6 F2)。 */
   writeSyncForTest(id: SidecarId, handshake: RuntimeHandshake): void {
     this.syncFs_.mkdirSync(this.root, { recursive: true })
-    this.syncFs_.writeFileSync(this.file(id), JSON.stringify(handshake))
+    this.syncFs_.writeFileSync(this.file(id), JSON.stringify(handshake), { mode: 0o600 })
   }
 }

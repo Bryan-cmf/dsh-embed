@@ -1,6 +1,7 @@
 /** runtime 握手文件層單元(SPEC §2):~展開、原子讀、畸形容忍、守衛刪除。 */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -29,6 +30,8 @@ test('RuntimeDir: 寫讀往返 + ensureDir + 畸形返回 null', async () => {
 
   dir.writeSyncForTest('mlx', { port: 12345, token: 'a'.repeat(64), pid: 4242 })
   assert.deepEqual(await dir.read('mlx'), { port: 12345, token: 'a'.repeat(64), pid: 4242 })
+  // t12 F2:握手文件含 token,必須 0600(同機其他用戶不可讀)
+  assert.equal(fs.statSync(dir.file('mlx')).mode & 0o777, 0o600)
 
   await writeFile(dir.file('tf'), '{ not json', 'utf8')
   assert.equal(await dir.read('tf'), null)

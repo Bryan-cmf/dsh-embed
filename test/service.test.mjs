@@ -6,6 +6,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  BACKEND_CATALOG,
   EmbedderResponseError,
   EmbedderServiceImpl,
   EmbedderUnavailableError,
@@ -82,22 +83,38 @@ test('未知後端 → EmbedderValidationError(永久配置錯,不被降級捕�
   await mlxRig.sup.dispose()
 })
 
+test('catalog dims 對齊 sidecar 完整 MRL 梯(t12 F1):共同子集 + 各自最大維', () => {
+  // sidecar 真相(mlx_embed.py:56 / tf_embed.py:39,97)
+  const WEMM_LADDER = [64, 128, 256, 512, 1024, 2048]
+  const QWEN3_LADDER = [64, 128, 256, 512, 1024, 2048, 2560]
+  assert.deepEqual(BACKEND_CATALOG['wemm2b-mlx4b'].dims, WEMM_LADDER)
+  assert.deepEqual(BACKEND_CATALOG['wemm2b-fp16'].dims, WEMM_LADDER)
+  assert.deepEqual(BACKEND_CATALOG['qwen3-4b-fp16'].dims, QWEN3_LADDER)
+  // 驗收要求的共同子集 [64,128,256,512,1024] 與各自最大維
+  const common = [64, 128, 256, 512, 1024]
+  for (const entry of Object.values(BACKEND_CATALOG)) {
+    for (const dim of common) assert.ok(entry.dims.includes(dim), `${entry.name} 缺 ${dim}`)
+  }
+  assert.equal(Math.max(...BACKEND_CATALOG['qwen3-4b-fp16'].dims), 2560)
+  assert.equal(Math.max(...BACKEND_CATALOG['wemm2b-mlx4b'].dims), 2048)
+})
+
 test('dim 預校驗(F4):catalog 已知後端不支持的 dim → EmbedderValidationError(免往返)', async () => {
   const { service, tfRig, mlxRig } = await makeService({
     service: { statFile: async () => ({ size: 8 }) },
   })
-  // qwen3-4b-fp16 dims [512,2560]:256 不支持
-  await assert.rejects(service.embedTexts(['x'], { dim: 256 }), (error) => {
+  // qwen3-4b-fp16 全梯 [64..2560]:梯外 dim(300)不支持
+  await assert.rejects(service.embedTexts(['x'], { dim: 300 }), (error) => {
     assert.ok(error instanceof EmbedderValidationError)
-    assert.match(error.message, /not in supported dims of 'qwen3-4b-fp16' \[512, 2560\]/)
+    assert.match(error.message, /not in supported dims of 'qwen3-4b-fp16' \[64, 128, 256, 512, 1024, 2048, 2560\]/)
     assert.equal(isEmbedderUnavailableError(error), false)
     return true
   })
-  // wemm2b-mlx4b dims [512,2048]:文本路徑 256 同樣擋下
-  await assert.rejects(service.embedTexts(['x'], { backend: 'wemm2b-mlx4b', dim: 256 }), EmbedderValidationError)
-  // 圖像路徑:qwen3 不支持 2048(modality 檢查之前/之後均屬驗證錯)
+  // wemm2b-mlx4b 全梯 [64..2048]:梯外 dim(300)文本路徑同樣擋下
+  await assert.rejects(service.embedTexts(['x'], { backend: 'wemm2b-mlx4b', dim: 300 }), EmbedderValidationError)
+  // 圖像路徑:qwen3 梯外 dim(300)
   await assert.rejects(
-    service.embedImage('/a.png', { backend: 'qwen3-4b-fp16', dim: 2048 }),
+    service.embedImage('/a.png', { backend: 'qwen3-4b-fp16', dim: 300 }),
     EmbedderValidationError,
   )
   assert.equal(tfRig.spawnedSpecs.length + mlxRig.spawnedSpecs.length, 0) // 往返前擋下

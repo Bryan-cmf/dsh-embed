@@ -1,0 +1,11 @@
+# @bryan-cmf/dsh-embed — bundle patch layer.
+#
+# Inserted when this package is listed in a profile's `dsh.profile.bundles`.
+# NOTE: this row PUBLISHES the `embedder` service — it must live in the
+# HOST composition (process-global, cross-session consumers such as
+# dsh-insights memory v2), never loose inside a per-session agent preset.
+# (See editing-cordis-compositions: a publishing row without an isolate
+# realm is rejected at mount time.)
+- insert:
+    - id: dsh-embed
+      name: '@bryan-cmf/dsh-embed'

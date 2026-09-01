@@ -1,0 +1,66 @@
+{
+  "name": "@bryan-cmf/dsh-embed",
+  "description": "DSH host plugin: local semantic embedding infrastructure — 'embedder' service (text/image embeddings, MRL dims) backed by supervised dual Python sidecars (MLX-4bit WeMM visual/skill backend + transformers fp16 Qwen3-4B text backend with WeMM fallback). All-local inference, 127.0.0.1 + token only.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "cordis.patch.yml",
+    "scripts"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "cordis-plugin",
+    "embedding",
+    "semantic-search",
+    "mlx",
+    "wemm",
+    "qwen3",
+    "agent-infrastructure"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "clean": "rm -rf lib",
+    "types": "tsc -p tsconfig.json",
+    "bundle": "tsdown",
+    "build": "pnpm clean && pnpm types && pnpm bundle && node scripts/copy-sidecar.mjs",
+    "test": "pnpm build && node --test test/*.test.mjs",
+    "smoke": "node scripts/smoke-host-client.mjs both",
+    "prepublishOnly": "pnpm build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "tsdown": "^0.22.0",
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@types/node": "^26.2.0"
+  }
+}

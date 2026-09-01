@@ -21,7 +21,7 @@ async function makeService(overrides = {}) {
   const mlxRig = await makeRig({ id: 'mlx', ...(overrides.mlx ?? {}) })
   const service = new EmbedderServiceImpl({
     supervisors: { tf: tfRig.sup, mlx: mlxRig.sup },
-    defaults: { textBackend: 'qwen3-4b-fp16', visualBackend: 'wemm2b-mlx4b', dim: 512 },
+    defaults: { textBackend: 'qwen3-4b-fp16', visualBackend: 'wemm2b-mlx4b', textDim: 2560, visualDim: 2048 },
     ...(overrides.service ?? {}),
   })
   return { service, tfRig, mlxRig }
@@ -32,14 +32,14 @@ test('默認文本路由 → tf sidecar 懶啟動;mlx 不動', async () => {
   const vectors = await drive(tfRig.clock, service.embedTexts(['hello', 'world']))
   assert.equal(vectors.length, 2)
   assert.ok(vectors[0] instanceof Float32Array)
-  assert.equal(vectors[0].length, 512)
+  assert.equal(vectors[0].length, 2560)
   assert.ok(Math.abs(l2norm(vectors[0]) - 1) < 1e-6)
   assert.equal(tfRig.spawnedSpecs.length, 1)
   assert.equal(mlxRig.spawnedSpecs.length, 0) // 未觸碰
   // 請求體:顯式 backend + dim
   const request = tfRig.servers[0].state.requests.find((r) => r.url === '/embed/texts')
   assert.equal(request.body.backend, 'qwen3-4b-fp16')
-  assert.equal(request.body.dim, 512)
+  assert.equal(request.body.dim, 2560)
   assert.equal(request.token, tfRig.servers[0].token)
   await tfRig.sup.dispose()
   await mlxRig.sup.dispose()
@@ -52,7 +52,7 @@ test('默認圖像路由 → mlx sidecar;tf 不動', async () => {
   })
   const vector = await drive(mlxRig.clock, service.embedImage('/tmp/a.png'))
   assert.ok(vector instanceof Float32Array)
-  assert.equal(vector.length, 512)
+  assert.equal(vector.length, 2048)
   assert.equal(mlxRig.spawnedSpecs.length, 1)
   assert.equal(tfRig.spawnedSpecs.length, 0)
   assert.deepEqual(statCalls, ['/tmp/a.png'])
@@ -207,11 +207,11 @@ test('指紋衛士:回應指紋不符 → EmbedderResponseError(帶期望指紋)
   const rig = tfRig
   // 先起來,再讓服務器回錯指紋
   await drive(rig.clock, service.embedTexts(['warm']))
-  rig.servers[0].state.fpOverride = 'wemm2b-mlx4b@512' // 跨後端指紋!
+  rig.servers[0].state.fpOverride = 'wemm2b-mlx4b@2048' // 跨後端指紋!
   await assert.rejects(drive(rig.clock, service.embedTexts(['x'])), (error) => {
     assert.ok(error instanceof EmbedderResponseError)
-    assert.match(error.message, /qwen3-4b-fp16@512/)
-    assert.equal(error.fingerprint, 'qwen3-4b-fp16@512')
+    assert.match(error.message, /qwen3-4b-fp16@2560/)
+    assert.equal(error.fingerprint, 'qwen3-4b-fp16@2560')
     return true
   })
   await tfRig.sup.dispose()
@@ -222,7 +222,7 @@ test('客戶端 MRL 保證:sidecar 回全維 2560 → 客戶端截斷重歸一�
   const { service, tfRig, mlxRig } = await makeService()
   await drive(tfRig.clock, service.embedTexts(['a']))
   tfRig.servers[0].state.fullDim = true
-  const vectors = await drive(tfRig.clock, service.embedTexts(['b']))
+  const vectors = await drive(tfRig.clock, service.embedTexts(['b'], { dim: 512 }))
   assert.equal(vectors[0].length, 512)
   assert.ok(Math.abs(l2norm(vectors[0]) - 1) < 1e-6)
   // 截斷前綴一致:全維向量的前 512 維再歸一
@@ -238,7 +238,7 @@ test('backends():down 時給目錄 alive:false;up 時給 live 清單', async () 
   assert.ok(list.some((b) => b.name === 'wemm2b-mlx4b'))
   assert.ok(list.some((b) => b.name === 'qwen3-4b-fp16'))
   assert.ok(list.some((b) => b.name === 'wemm2b-fp16'))
-  assert.ok(list.every((b) => b.fingerprint.endsWith('@512')))
+  assert.ok(list.every((b) => b.fingerprint === (b.name === 'wemm2b-mlx4b' ? 'wemm2b-mlx4b@2048' : `${b.name}@2560`)))
 
   await drive(tfRig.clock, service.embedTexts(['warm']))
   list = await service.backends()

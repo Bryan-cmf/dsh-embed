@@ -30,7 +30,7 @@ import fsp from 'node:fs/promises'
 
 export interface EmbedderServiceOptions {
   supervisors: Record<SidecarId, SidecarSupervisor>
-  defaults: { textBackend: string; visualBackend: string; dim: number }
+  defaults: { textBackend: string; visualBackend: string; textDim: number; visualDim: number }
   /** 單次 embed 請求超時;默認 120s(圖像頁批量場景留餘量)。 */
   requestTimeoutMs?: number
   fetchImpl?: FetchLike
@@ -44,7 +44,7 @@ const PROBE_TIMEOUT_MS = 2_000
 
 export class EmbedderServiceImpl implements EmbedderService {
   private readonly supervisors: Record<SidecarId, SidecarSupervisor>
-  private readonly defaults: { textBackend: string; visualBackend: string; dim: number }
+  private readonly defaults: { textBackend: string; visualBackend: string; textDim: number; visualDim: number }
   private readonly routes: Record<string, SidecarId>
   private readonly statFile: (path: string) => Promise<{ size: number }>
   private readonly requestTimeoutMs: number
@@ -105,7 +105,8 @@ export class EmbedderServiceImpl implements EmbedderService {
           continue
         }
       }
-      out.push(...catalogBackendInfos(id, this.defaults.dim, false))
+      // F4:catalog 兜底展示按 sidecar 選默認維度(tf=textDim / mlx=visualDim)。
+      out.push(...catalogBackendInfos(id, id === 'tf' ? this.defaults.textDim : this.defaults.visualDim, false))
     }
     return out
   }
@@ -123,7 +124,7 @@ export class EmbedderServiceImpl implements EmbedderService {
       }
     }
     const backend = opts.backend ?? this.defaults.textBackend
-    const dim = opts.dim ?? this.defaults.dim
+    const dim = opts.dim ?? this.defaults.textDim
     if (!Number.isInteger(dim) || dim <= 0) {
       throw new EmbedderValidationError(`embedTexts: dim must be a positive integer, got ${dim}`)
     }
@@ -157,7 +158,7 @@ export class EmbedderServiceImpl implements EmbedderService {
     if (size > MAX_IMAGE_BYTES) {
       throw new EmbedderValidationError(`embedImage: '${path}' is ${size} bytes, over limit ${MAX_IMAGE_BYTES}`)
     }
-    const dim = opts.dim ?? this.defaults.dim
+    const dim = opts.dim ?? this.defaults.visualDim
     if (!Number.isInteger(dim) || dim <= 0) {
       throw new EmbedderValidationError(`embedImage: dim must be a positive integer, got ${dim}`)
     }

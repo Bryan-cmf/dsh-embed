@@ -62,7 +62,7 @@ interface EmbedderService {
 ```yaml
 # host composition 行 config(默認值;全部可覆寫)
 runtimeDir: '~/.dsh/run/dsh-embed'
-defaults: { textBackend: 'qwen3-4b-fp16', visualBackend: 'wemm2b-mlx4b', dim: 512 }
+defaults: { textBackend: 'qwen3-4b-fp16', visualBackend: 'wemm2b-mlx4b', textDim: 2560, visualDim: 2048 }
 mlxSidecar: { enabled: true, venv: '~/.dsh/dsh-embed/venv-mlx', keepAliveSec: 900, eagerBackends: [] }
 tfSidecar:  { enabled: true, venv: '~/.dsh/dsh-embed/venv-tf',  keepAliveSec: 900, eagerBackends: ['qwen3-4b-fp16'] }
 healthIntervalMs: 30000        # 健康檢查間隔

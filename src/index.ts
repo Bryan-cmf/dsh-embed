@@ -58,7 +58,10 @@ const Config = z.object({
   defaults: z.object({
     textBackend: z.string().default('qwen3-4b-fp16'),
     visualBackend: z.string().default('wemm2b-mlx4b'),
-    dim: z.number().min(32).max(4096).default(512),
+    // F4 修復(SPEC v1.3 §7):按後端全維默認——MRL-512 對兩後端均有實測損失
+    // (text -9.7pp / visual -5.8pp,t7/t15/t16 消融);截斷維度降為顯式配置選項。
+    textDim: z.number().min(32).max(4096).default(2560),
+    visualDim: z.number().min(32).max(4096).default(2048),
   }),
   mlxSidecar: sidecarSchema('~/.dsh/dsh-embed/venv-mlx', []),
   tfSidecar: sidecarSchema('~/.dsh/dsh-embed/venv-tf', ['qwen3-4b-fp16']),
@@ -86,7 +89,7 @@ interface SidecarConfigSlice {
 
 interface ConfigType {
   runtimeDir: string
-  defaults: { textBackend: string; visualBackend: string; dim: number }
+  defaults: { textBackend: string; visualBackend: string; textDim: number; visualDim: number }
   mlxSidecar: SidecarConfigSlice
   tfSidecar: SidecarConfigSlice
   healthIntervalMs: number

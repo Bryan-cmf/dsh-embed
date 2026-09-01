@@ -43,16 +43,17 @@ test('Config:schemastery 默認值解析(SPEC §7)', () => {
   assert.equal(config.mlxSidecar.venv, '~/.dsh/dsh-embed/venv-mlx')
   assert.equal(config.mlxSidecar.keepAliveSec, 900)
   assert.equal(config.tfSidecar.venv, '~/.dsh/dsh-embed/venv-tf')
-  assert.deepEqual(config.tfSidecar.eagerBackends, [])
+  assert.deepEqual(config.tfSidecar.eagerBackends, ['qwen3-4b-fp16']) // SPEC §7:tf 默認預熱文本後端
+  assert.deepEqual(config.mlxSidecar.eagerBackends, []) // mlx 懶啟動
   assert.equal(config.healthIntervalMs, 30000)
   assert.equal(config.healthFailureLimit, 3)
   assert.equal(config.startupTimeoutMs, 180000)
   assert.equal(config.maxRestartAttempts, 3)
 })
 
-test('apply():註冊 embedder 服務 + 可逆清理;默認全懶啟動', async () => {
+test('apply():註冊 embedder 服務 + 可逆清理;顯式 eagerBackends:[] 時全懶啟動', async () => {
   const { ctx, provided, disposers } = makeCtx()
-  apply(ctx, await isolatedConfig())
+  apply(ctx, await isolatedConfig({ tfSidecar: { eagerBackends: [] } }))
 
   assert.equal(name, 'dsh-embed')
   assert.deepEqual(inject, [])

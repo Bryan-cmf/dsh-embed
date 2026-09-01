@@ -33,7 +33,7 @@ const name = 'dsh-embed'
 
 // ── config(SPEC §7)──────────────────────────────────────────────────────────
 
-function sidecarSchema(venvDefault: string) {
+function sidecarSchema(venvDefault: string, eagerDefault: readonly string[]) {
   return z.object({
     enabled: z.boolean().default(true),
     venv: z.string().default(venvDefault),
@@ -43,8 +43,12 @@ function sidecarSchema(venvDefault: string) {
     script: z.string().default(''),
     /** 空閒退出窗口(秒);0 = 不自動退出。 */
     keepAliveSec: z.number().min(0).max(86400).default(900),
-    /** 插件載入即預熱的後端(打破懶啟動;僅 tf 配 'qwen3-4b-fp16')。 */
-    eagerBackends: z.array(z.string()).default([]),
+    /**
+     * 插件載入即預熱的後端(打破懶啟動)。按 sidecar 區分的默認(SPEC §7):
+     * tf = ['qwen3-4b-fp16'](文本後端常駐就緒;WeMM fp16 保持惰性)、
+     * mlx = [](懶啟動)。顯式 eagerBackends: [] 可關閉預熱。
+     */
+    eagerBackends: z.array(z.string()).default([...eagerDefault]),
   })
 }
 
@@ -56,8 +60,8 @@ const Config = z.object({
     visualBackend: z.string().default('wemm2b-mlx4b'),
     dim: z.number().min(32).max(4096).default(512),
   }),
-  mlxSidecar: sidecarSchema('~/.dsh/dsh-embed/venv-mlx'),
-  tfSidecar: sidecarSchema('~/.dsh/dsh-embed/venv-tf'),
+  mlxSidecar: sidecarSchema('~/.dsh/dsh-embed/venv-mlx', []),
+  tfSidecar: sidecarSchema('~/.dsh/dsh-embed/venv-tf', ['qwen3-4b-fp16']),
   /** 健康檢查間隔;連續 healthFailureLimit 失敗 → kill + 退避重啟。 */
   healthIntervalMs: z.number().min(1000).max(600000).default(30000),
   healthFailureLimit: z.number().min(1).max(10).default(3),
@@ -174,7 +178,9 @@ function apply(ctx: Context, config: ConfigType): void {
     requestTimeoutMs: config.requestTimeoutMs,
   })
 
-  // 預熱:eagerBackends 打破懶啟動(tf 默認 ['qwen3-4b-fp16'],SPEC §7)。
+  // 預熱:eagerBackends 打破懶啟動。默認(SPEC §7):tf=['qwen3-4b-fp16']
+  // (文本後端常駐就緒,免首次 embedTexts ~30s 冷啟動)、mlx=[](懶啟動)。
+  // 顯式 eagerBackends: [] 可整體關閉(全懶啟動)。
   for (const id of ['tf', 'mlx'] as const) {
     const slice = id === 'tf' ? config.tfSidecar : config.mlxSidecar
     if (slice.enabled && slice.eagerBackends.length > 0) {

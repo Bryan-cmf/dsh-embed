@@ -45,9 +45,11 @@ interface EmbedderService {
 
 **失敗語義**:目標後端不可用 → 立即拋 `EmbedderUnavailableError`,調用方(dsh-insights memory v2)捕獲並降級 keyword。**禁止自動跨後端替補**。`instruct` 僅 Qwen3 家族生效。請求上限:texts ≤64 條/次、圖像 ≤30MB。
 
+**輸入驗證**(`EmbedderValidationError`,永久性、不被降級路徑捕獲):未知後端名、texts 超限/空、dim 非法或不屬於該後端 catalog 支持維度(預校驗擋掉顯然非法 dim 免一次往返;sidecar `/embed` 端仍為最終權威)。
+
 ## 進程監管規則(SPEC §2)
 
-- **懶啟動**:首次 embed 調用觸發 spawn(冷啟動 mlx ~8s / tf ~30s);`eagerBackends` 可打破
+- **懶啟動**:首次 embed 調用觸發 spawn(冷啟動 mlx ~8s / tf ~30s);`eagerBackends` 打破懶啟動——tf 默認 `['qwen3-4b-fp16']` 預熱(SPEC §7),mlx 默認懶啟動
 - **握手**:sidecar 綁 127.0.0.1:0 後把 `{port, token, pid}` 原子寫入 runtime 文件,插件輪詢發現 + `/health` 就緒
 - **孤兒收養**:host 重啟後發現存活健康的同位 sidecar → 直接收養,不重複 spawn
 - **健康檢查**:每 30s `GET /health`;連續 3 次失敗 → kill + 重啟(指數退避 1s/4s,上限 3 次)
@@ -62,7 +64,7 @@ interface EmbedderService {
 runtimeDir: '~/.dsh/run/dsh-embed'
 defaults: { textBackend: 'qwen3-4b-fp16', visualBackend: 'wemm2b-mlx4b', dim: 512 }
 mlxSidecar: { enabled: true, venv: '~/.dsh/dsh-embed/venv-mlx', keepAliveSec: 900, eagerBackends: [] }
-tfSidecar:  { enabled: true, venv: '~/.dsh/dsh-embed/venv-tf',  keepAliveSec: 900, eagerBackends: [] }
+tfSidecar:  { enabled: true, venv: '~/.dsh/dsh-embed/venv-tf',  keepAliveSec: 900, eagerBackends: ['qwen3-4b-fp16'] }
 healthIntervalMs: 30000        # 健康檢查間隔
 healthFailureLimit: 3          # 連敗殺線
 startupTimeoutMs: 180000       # 握手+就緒窗口(tf 冷啟動 30s 留餘量)
@@ -71,7 +73,7 @@ backoffBaseMs: 1000            # 退避基數(×4 遞增)
 maxRestartAttempts: 3
 ```
 
-默認**全懶啟動**(`eagerBackends: []`);生產建議 tf 行配 `eagerBackends: ['qwen3-4b-fp16']` 預熱文本後端。
+eager 預設與 SPEC §7 一致:**tf 默認預熱 `['qwen3-4b-fp16']`**(文本後端常駐就緒,免首次 embedTexts ~30s 冷啟動;WeMM fp16 fallback 仍惰性),**mlx 默認 `[]` 懶啟動**。要全懶啟動可顯式 `tfSidecar.eagerBackends: []`。
 
 ## 安裝與接線
 

@@ -60,11 +60,29 @@ export class EmbedderServiceImpl implements EmbedderService {
   private route(backend: string): SidecarId {
     const known = this.routes[backend] ?? sidecarForBackend(backend)
     if (known === null) {
-      throw new EmbedderUnavailableError(
+      // 未知後端是調用方/配置錯誤(永久性),非可用性事件——拋 validation,
+      // 避免被 isEmbedderUnavailableError() 捕獲而靜默降級 keyword、遮蔽配置錯。
+      throw new EmbedderValidationError(
         `unknown backend '${backend}' (known: ${[...new Set([...Object.keys(this.routes), 'wemm2b-mlx4b', 'qwen3-4b-fp16', 'wemm2b-fp16'])].join(', ')})`,
       )
     }
     return known
+  }
+
+  /**
+   * dim 預校驗(F4):catalog 已知後端先按支持維度擋掉顯然非法的 dim,
+   * 免一次無謂往返;sidecar /embed 端仍為最終權威(僅 routes 註冊、
+   * 不在 catalog 的擴展後端交由 sidecar 裁決)。
+   */
+  private verifyDimSupported(backend: string, dim: number, api: string): void {
+    const entry = BACKEND_CATALOG[backend]
+    if (entry === undefined) return
+    if (!entry.dims.includes(dim)) {
+      throw new EmbedderValidationError(
+        `${api}: dim ${dim} not in supported dims of '${backend}' [${entry.dims.join(', ')}] (sidecar is the final authority)`,
+        fingerprint(backend, dim),
+      )
+    }
   }
 
   private supervisor(backend: string): SidecarSupervisor {
@@ -109,6 +127,8 @@ export class EmbedderServiceImpl implements EmbedderService {
     if (!Number.isInteger(dim) || dim <= 0) {
       throw new EmbedderValidationError(`embedTexts: dim must be a positive integer, got ${dim}`)
     }
+    this.route(backend)
+    this.verifyDimSupported(backend, dim, 'embedTexts')
     if (opts.instruct !== undefined && !backend.startsWith('qwen3')) {
       throw new EmbedderValidationError(
         `embedTexts: instruct is only supported on qwen3* backends, not '${backend}'`,
@@ -141,6 +161,7 @@ export class EmbedderServiceImpl implements EmbedderService {
     if (!Number.isInteger(dim) || dim <= 0) {
       throw new EmbedderValidationError(`embedImage: dim must be a positive integer, got ${dim}`)
     }
+    this.verifyDimSupported(backend, dim, 'embedImage')
     const catalogEntry = BACKEND_CATALOG[backend]
     if (catalogEntry !== undefined && !catalogEntry.modalities.includes('image')) {
       throw new EmbedderValidationError(`embedImage: backend '${backend}' does not support images`, fingerprint(backend, dim))

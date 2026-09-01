@@ -10,6 +10,7 @@ import {
   EmbedderServiceImpl,
   EmbedderUnavailableError,
   EmbedderValidationError,
+  isEmbedderUnavailableError,
   l2norm,
 } from '../lib/index.js'
 import { drive, makeRig } from './helpers.mjs'
@@ -61,11 +62,61 @@ test('默認圖像路由 → mlx sidecar;tf 不動', async () => {
   await mlxRig.sup.dispose()
 })
 
-test('未知後端 → EmbedderUnavailableError,不 spawn 任何 sidecar', async () => {
+test('未知後端 → EmbedderValidationError(永久配置錯,不被降級捕獲),不 spawn', async () => {
   const { service, tfRig, mlxRig } = await makeService()
-  await assert.rejects(service.embedTexts(['x'], { backend: 'nope' }), EmbedderUnavailableError)
-  await assert.rejects(service.embedImage('/x.png', { backend: 'nope' }), EmbedderUnavailableError)
+  const errors = []
+  for (const call of [
+    () => service.embedTexts(['x'], { backend: 'nope' }),
+    () => service.embedImage('/x.png', { backend: 'nope' }),
+  ]) {
+    errors.push(await call().then(() => null, (error) => error))
+  }
+  for (const error of errors) {
+    assert.ok(error instanceof EmbedderValidationError)
+    assert.match(error.message, /unknown backend 'nope'/)
+    // F3 關鍵:不得被 isEmbedderUnavailableError 誤判為可用性事件而靜默降級
+    assert.equal(isEmbedderUnavailableError(error), false)
+  }
   assert.equal(tfRig.spawnedSpecs.length + mlxRig.spawnedSpecs.length, 0)
+  await tfRig.sup.dispose()
+  await mlxRig.sup.dispose()
+})
+
+test('dim 預校驗(F4):catalog 已知後端不支持的 dim → EmbedderValidationError(免往返)', async () => {
+  const { service, tfRig, mlxRig } = await makeService({
+    service: { statFile: async () => ({ size: 8 }) },
+  })
+  // qwen3-4b-fp16 dims [512,2560]:256 不支持
+  await assert.rejects(service.embedTexts(['x'], { dim: 256 }), (error) => {
+    assert.ok(error instanceof EmbedderValidationError)
+    assert.match(error.message, /not in supported dims of 'qwen3-4b-fp16' \[512, 2560\]/)
+    assert.equal(isEmbedderUnavailableError(error), false)
+    return true
+  })
+  // wemm2b-mlx4b dims [512,2048]:文本路徑 256 同樣擋下
+  await assert.rejects(service.embedTexts(['x'], { backend: 'wemm2b-mlx4b', dim: 256 }), EmbedderValidationError)
+  // 圖像路徑:qwen3 不支持 2048(modality 檢查之前/之後均屬驗證錯)
+  await assert.rejects(
+    service.embedImage('/a.png', { backend: 'qwen3-4b-fp16', dim: 2048 }),
+    EmbedderValidationError,
+  )
+  assert.equal(tfRig.spawnedSpecs.length + mlxRig.spawnedSpecs.length, 0) // 往返前擋下
+  await tfRig.sup.dispose()
+  await mlxRig.sup.dispose()
+})
+
+test('dim 預校驗:支持的 dim 放行;routes 註冊的擴展後端交 sidecar 裁決', async () => {
+  const { service, tfRig, mlxRig } = await makeService({
+    service: { routes: { 'custom-backend': 'tf' }, statFile: async () => ({ size: 8 }) },
+  })
+  // 支持的 dim 正常走通(qwen3 2560 / wemm2b-mlx4b 2048 圖像)
+  const vectors = await drive(tfRig.clock, service.embedTexts(['a'], { dim: 2560 }))
+  assert.equal(vectors[0].length, 2560)
+  const image = await drive(mlxRig.clock, service.embedImage('/a.png', { dim: 2048 }))
+  assert.equal(image.length, 2048)
+  // catalog 外的擴展後端:不做預校驗(sidecar 是最終權威)
+  const custom = await drive(tfRig.clock, service.embedTexts(['b'], { backend: 'custom-backend', dim: 999 }))
+  assert.equal(custom[0].length, 999)
   await tfRig.sup.dispose()
   await mlxRig.sup.dispose()
 })

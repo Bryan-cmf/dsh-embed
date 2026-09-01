@@ -2,7 +2,7 @@
 
 DSH host 插件:**全本地語義嵌入基礎設施**。發布 `embedder` 服務(文本/圖像嵌入、多後端路由、MRL 維度),背後由進程監管器管理雙 Python sidecar。零出網(僅 127.0.0.1 + token)、零外部向量庫。
 
-> 配套文檔:[Plan](../dsh-wemm-integration-plan.md) · [PRD](../dsh-embed-prd.md) · [SPEC](../dsh-embed-spec.md) · 實驗證據 `../dsh-wemm-poc/results/`
+> 配套文檔:[Plan](docs/dsh-wemm-integration-plan.md) · [PRD](docs/dsh-embed-prd.md) · [SPEC](docs/dsh-embed-spec.md) · 實驗證據 `../dsh-wemm-poc/results/`
 
 ## 架構(SPEC §2)
 
